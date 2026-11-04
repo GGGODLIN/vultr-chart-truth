@@ -1,0 +1,13 @@
+services:
+  chart-truth-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vultr-chart-truth-studio
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - VULTR_API_KEY=${VULTR_API_KEY:-}
+    restart: unless-stopped
