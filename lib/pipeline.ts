@@ -154,7 +154,8 @@ export function extractExecutableScript(rawText: string): string {
 
 export async function scanCsvForPromptInjection(
   rawCsv: string,
-  options?: VultrInferenceOptions
+  options?: VultrInferenceOptions,
+  promptText?: string
 ): Promise<SafetyScanVerdict> {
   const lines = String(rawCsv ?? '')
     .trim()
@@ -162,7 +163,16 @@ export async function scanCsvForPromptInjection(
     .filter((l) => l.trim().length > 0);
 
   const findings: SafetyScanFinding[] = [];
-  const headers = lines.length > 0 ? parseCsvLine(lines[0]) : [];
+  if (typeof promptText === 'string' && promptText.trim().length > 0) {
+    for (const rule of INJECTION_RULES) {
+      if (rule.regex.test(promptText)) {
+        findings.push({
+          location: 'header',
+          pattern: rule.patternName,
+        });
+      }
+    }
+  }
 
   lines.forEach((line, rowIndex) => {
     const cells = parseCsvLine(line);
@@ -440,6 +450,24 @@ export async function runChartTruthPipeline(
     };
   }
 
+  if (Buffer.byteLength(req.prompt, 'utf8') > 16384) {
+    return {
+      ok: false,
+      status: 400,
+      error: {
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'Prompt exceeds maximum allowed size of 16 KB.',
+      },
+      scenarioId: req.scenarioId,
+      safetyScan: emptySafetyScan,
+      stages: [],
+      initialRun: null,
+      repairedRun: null,
+      selfHealTriggered: false,
+      containersDestroyed: 0,
+    };
+  }
+
   const inferenceOptions: VultrInferenceOptions = {
     apiKey: req.apiKey,
     fetchImpl: req.fetchImpl,
@@ -448,7 +476,8 @@ export async function runChartTruthPipeline(
 
   const safetyScan = await scanCsvForPromptInjection(
     req.csvText,
-    inferenceOptions
+    inferenceOptions,
+    req.prompt
   );
 
   const matchedPreset = findMatchingPreset(req.scenarioId, req.csvText);

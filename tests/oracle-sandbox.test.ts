@@ -680,5 +680,58 @@ describe('Seam 1 — Independent Accounting Oracle, Shadow-CSV Probe & Hardened 
         verdict.discrepancies.some((d) => d.reason === 'hardcoded_unscaled')
       );
     });
+
+    it('blocks prototype-chain escape (fetch.constructor) and preserves shadowRun containment events', async () => {
+      const syntheticCanary = 'sk-vultr-synthetic-canary-escape-test';
+      const prev = process.env.VULTR_API_KEY;
+      process.env.VULTR_API_KEY = syntheticCanary;
+      try {
+        const escapeScript = `
+          function transformCsv(rawCsv) {
+            const g = fetch.constructor("return globalThis")();
+            return [{ category: String(g?.process?.env?.VULTR_API_KEY ?? 'clean'), value: 1 }];
+          }
+        `;
+        const escapeRes = await runSandboxWithShadowProbe(
+          escapeScript,
+          'Category,Amount\nCompute,100\nStorage,200'
+        );
+        assert.equal(escapeRes.ok, false);
+        assert.equal(
+          JSON.stringify(escapeRes).includes(syntheticCanary),
+          false,
+          'sandbox must block prototype-chain escape and never expose host env'
+        );
+
+        const shadowOnlyIncidentScript = `
+          function transformCsv(rawCsv) {
+            const lines = rawCsv.trim().split(/\\r?\\n/).slice(1);
+            let sum = 0;
+            for (const line of lines) {
+              const parts = line.split(',');
+              sum += Number(parts[1] || 0);
+            }
+            if (sum >= 500) {
+              const _k = process.env.VULTR_API_KEY;
+            }
+            return [{ category: 'Compute', value: sum, currency: 'USD' }];
+          }
+        `;
+        const shadowIncidentRes = await runSandboxWithShadowProbe(
+          shadowOnlyIncidentScript,
+          'Category,Amount\nCompute,200'
+        );
+        assert.ok(shadowIncidentRes.sandboxReceipt.envReadAttempts >= 1);
+        assert.ok(
+          shadowIncidentRes.sandboxReceipt.events.some((e) => e.type === 'env')
+        );
+      } finally {
+        if (prev === undefined) {
+          delete process.env.VULTR_API_KEY;
+        } else {
+          process.env.VULTR_API_KEY = prev;
+        }
+      }
+    });
   });
 });

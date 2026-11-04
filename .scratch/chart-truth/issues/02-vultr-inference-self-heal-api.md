@@ -30,4 +30,8 @@
   - RED baseline observed before implementation: `tests 5 | pass 0 | fail 5` in `tests/pipeline-api.test.ts`.
   - Applied all 9 `[ticket-yagni]` `demote` trims (`FILE:lib/index.ts`, single-repair `runChartTruthPipeline`, `InjectionRule`, `SafetyScanLocation`/`SafetyScanFinding`/`SafetyScanVerdict`, `PipelineStageStatus`, `VultrInferenceOptions`, `ChartTruthRunResponse`).
   - GREEN verification after trim (`dispatch_base_sha = 80c69fe38932fec9c94b6e64c095d1e123d43bc8`): `npm test` passed `17/17` tests (`12` Ticket 01 tests + `5` Ticket 02 acceptance tests); `npm run typecheck` exited `0`.
+- **Closeout Review Findings & Fixes**:
+  - `Failure-miss: F6 — POST /api/chart-truth/run parsed full request JSON before size check and did not cap req.prompt length → oversized prompt bypassed MAX_CSV_BYTES` (Finding 3, MEDIUM): Fixed in `app/api/chart-truth/run/route.ts` and `lib/pipeline.ts` (`MAX_REQUEST_BODY_BYTES` & `16 KB` prompt limit) and verified in `tests/pipeline-api.test.ts`.
+  - `Failure-miss: F5 — Stage 1 scanCsvForPromptInjection scanned only req.csvText and not req.prompt → prompt-level injection strings did not flag safetyPreScan` (Finding 4, LOW): Fixed in `lib/pipeline.ts` and verified in `tests/pipeline-api.test.ts`.
+
 

@@ -29,4 +29,7 @@
   - RED baseline observed before implementation: `tests 21 | pass 17 | fail 4` in `tests/studio-ui-deploy.test.ts`.
   - Applied all 6 `[ticket-yagni]` cuts (`FILE:lib/index.ts` reverted, `roundCoord` inlined, and removed `buildPreset1Receipt`, `buildPreset1Attempt`, `buildDefaultPreset1Response`, `PRESET1_EXPECTED_SERIES`).
   - GREEN verification after trim (`dispatch_base_sha = 8cebcbec571411c4a7baf0907b3d29741a123196`): `npm test` passed `21/21` tests across `6` suites; `npm run typecheck` exited `0`; `npm run build` (`next build`) exited `0`; `react-doctor` scored `100 / 100 Great`.
+- **Closeout Review Findings & Fixes**:
+  - `Failure-miss: F5 — Repository had .gitignore excluding .env and node_modules but lacked .dockerignore → Dockerfile COPY . . could copy local .env into builder layer` (Finding 5, LOW): Added `.dockerignore` and verified in `tests/studio-ui-deploy.test.ts`.
+
 

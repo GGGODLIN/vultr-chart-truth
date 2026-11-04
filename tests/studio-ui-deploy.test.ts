@@ -229,10 +229,20 @@ describe('Ticket 03 — Interactive ChartTruth Studio UI, Blast Radius Visualize
   it('Acceptance 4 (Story 4): repository includes Dockerfile, docker-compose.yml, and README.md documenting Vultr Cloud Compute VM, Vultr Serverless Inference, and Docker sandbox containment architecture', () => {
     const rootDir = path.resolve(import.meta.dirname, '..');
     const dockerfilePath = path.join(rootDir, 'Dockerfile');
+    const dockerignorePath = path.join(rootDir, '.dockerignore');
     const composePath = path.join(rootDir, 'docker-compose.yml');
     const readmePath = path.join(rootDir, 'README.md');
 
     assert.equal(fs.existsSync(dockerfilePath), true, 'Dockerfile must exist');
+    assert.equal(
+      fs.existsSync(dockerignorePath),
+      true,
+      '.dockerignore must exist'
+    );
+    assert.ok(
+      fs.readFileSync(dockerignorePath, 'utf8').includes('.env'),
+      '.dockerignore must exclude .env'
+    );
     assert.equal(
       fs.existsSync(composePath),
       true,

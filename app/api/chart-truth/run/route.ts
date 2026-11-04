@@ -1,10 +1,62 @@
 import { runChartTruthPipeline } from '../../../../lib/pipeline.ts';
 import type { ChartTruthRunResponse } from '../../../../lib/types.ts';
 
+const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024 + 65536;
+
 export async function POST(request: Request): Promise<Response> {
+  const contentLengthHeader = request.headers.get('content-length');
+  if (
+    contentLengthHeader !== null &&
+    Number(contentLengthHeader) > MAX_REQUEST_BODY_BYTES
+  ) {
+    const oversizedResponse: ChartTruthRunResponse = {
+      ok: false,
+      status: 400,
+      error: {
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'Request payload exceeds maximum allowed size.',
+      },
+      safetyScan: {
+        safe: true,
+        modelUsed: 'nemotron-3.5-content-safety',
+        mode: 'fallback',
+        findings: [],
+      },
+      stages: [],
+      initialRun: null,
+      repairedRun: null,
+      selfHealTriggered: false,
+      containersDestroyed: 0,
+    };
+    return Response.json(oversizedResponse, { status: 400 });
+  }
+
   let body: Record<string, unknown>;
   try {
-    const parsed = (await request.json()) as unknown;
+    const rawText = await request.text();
+    if (Buffer.byteLength(rawText, 'utf8') > MAX_REQUEST_BODY_BYTES) {
+      const oversizedResponse: ChartTruthRunResponse = {
+        ok: false,
+        status: 400,
+        error: {
+          code: 'PAYLOAD_TOO_LARGE',
+          message: 'Request payload exceeds maximum allowed size.',
+        },
+        safetyScan: {
+          safe: true,
+          modelUsed: 'nemotron-3.5-content-safety',
+          mode: 'fallback',
+          findings: [],
+        },
+        stages: [],
+        initialRun: null,
+        repairedRun: null,
+        selfHealTriggered: false,
+        containersDestroyed: 0,
+      };
+      return Response.json(oversizedResponse, { status: 400 });
+    }
+    const parsed = JSON.parse(rawText) as unknown;
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       throw new Error('Request body must be a JSON object.');
     }

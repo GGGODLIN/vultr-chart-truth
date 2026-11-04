@@ -32,5 +32,9 @@
   - RED baseline observed before implementation: `tests 12 | pass 1 | fail 11` (all 6 Role 1 concrete capability examples failed due to missing capability).
   - GREEN verification after integrating `ticket-01.patch` (`dispatch_base_sha = 0b99f2d392a0f4f8329ec5d83a68c8625084ea85`): `npm test` (`node --experimental-strip-types --test tests/*.test.ts`) passed `12/12` tests across `4` suites (Role 1 concrete presets/boundaries, Role 2 `fast-check` Shape 2 safety property guardians + reachability witnesses outside `fc.property`, Role 3 individual `P1`/`P2`/`P3` calibration controls + deterministic counterexample replay); `npm run typecheck` exited `0`.
 - **Ticket 01 YAGNI Runner Note**: `ticket-yagni` hook reported `Unreviewed: no registered absolute ticket path for this worker` because the worker prompt included both the worktree path and main repo path to `01-oracle-sandbox-pbt.md`; recorded per `/implement` rule ("A runner error or an empty-diff skip is recorded in the Verification Log and not retried with different arguments").
+- **Closeout Review Findings & Fixes**:
+  - `Acceptance-miss —When a script attempts outbound fetch/http, reads process.env.VULTR_API_KEY... → executeIsolatedVmRun exposed host-realm function constructors (fetch.constructor("return globalThis")()) inside node:vm` (Finding 1, HIGH): Fixed in `lib/sandbox.ts` by constructing all sandbox globals inside the VM realm over a single null-prototype primitive-returning `hostTrap` and verified by regression test in `tests/oracle-sandbox.test.ts`.
+  - `Failure-miss: F5 — runSandboxWithShadowProbe discarded shadowRun.receipt → containment events triggered only on the k=3 shadow run were omitted from sandboxReceipt` (Finding 2, LOW): Fixed in `lib/sandbox.ts` by merging `shadowRun.receipt` into `mergedReceipt` and verified in `tests/oracle-sandbox.test.ts`.
+
 
 

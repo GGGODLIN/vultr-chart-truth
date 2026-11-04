@@ -131,187 +131,209 @@ async function executeIsolatedVmRun(
     });
   };
 
-  const envProxy = new Proxy<Record<string, string | undefined>>(
-    {},
+  const hostTrap = (
+    kind: unknown,
+    arg1?: unknown,
+    arg2?: unknown
+  ): string => {
+    const trapKind = String(kind ?? '');
+    if (trapKind === 'env_get') {
+      const prop = String(arg1 ?? '');
+      if (prop === 'toJSON' || prop === 'valueOf') {
+        return '';
+      }
+      envReadAttempts += 1;
+      recordEvent(
+        'env',
+        `Blocked read of process.env.${prop} (zero-secret sandbox)`,
+        true
+      );
+      return '';
+    }
+    if (trapKind === 'env_keys') {
+      envReadAttempts += 1;
+      recordEvent(
+        'env',
+        'Blocked enumeration of process.env keys (zero-secret sandbox)',
+        true
+      );
+      return '';
+    }
+    if (trapKind === 'net_fetch' || trapKind === 'net_http_req' || trapKind === 'net_http_get') {
+      outboundAttempts += 1;
+      const targetUrl = String(arg1 ?? 'unknown-url');
+      const label =
+        trapKind === 'net_fetch'
+          ? `Blocked outbound fetch to ${targetUrl} (--network=none)`
+          : trapKind === 'net_http_req'
+            ? `Blocked outbound HTTP request to ${targetUrl} (--network=none)`
+            : `Blocked outbound HTTP GET to ${targetUrl} (--network=none)`;
+      recordEvent('network', label, true);
+      return `SANDBOX_NETWORK_BLOCKED: ${label}`;
+    }
+    if (trapKind === 'fs_write') {
+      if (isSafeWorkPath(arg1)) {
+        inMemoryWorkFs.set(String(arg1), String(arg2 ?? ''));
+        return 'OK';
+      }
+      fsWriteAttempts += 1;
+      const pathLabel = String(arg1 ?? 'unknown-path');
+      recordEvent(
+        'filesystem',
+        `Blocked filesystem write outside /work: ${pathLabel} (--read-only)`,
+        true
+      );
+      return `SANDBOX_FS_READONLY: Cannot write to ${pathLabel} on read-only root filesystem`;
+    }
+    if (trapKind === 'fs_read') {
+      const p = String(arg1 ?? '');
+      if (p === '/work/input.csv' || p === 'input.csv') {
+        return `DATA:${csvInput}`;
+      }
+      if (inMemoryWorkFs.has(p)) {
+        return `DATA:${inMemoryWorkFs.get(p) ?? ''}`;
+      }
+      return `ERR:SANDBOX_FS_READ_BLOCKED: Cannot read ${p}`;
+    }
+    if (trapKind === 'mod_block') {
+      const clean = String(arg1 ?? '');
+      if (clean === 'child_process' || clean === 'net' || clean === 'tls') {
+        outboundAttempts += 1;
+        recordEvent(
+          'network',
+          `Blocked restricted module require('${clean}') in sandbox`,
+          true
+        );
+        return `SANDBOX_MODULE_BLOCKED: Module '${clean}' is forbidden in sandbox`;
+      }
+      return `SANDBOX_MODULE_BLOCKED: External module '${clean}' is unavailable`;
+    }
+    if (trapKind === 'proc_exit') {
+      const code = Number(arg1);
+      exitCode = Number.isFinite(code) ? code : 1;
+      return `SANDBOX_PROCESS_EXIT:${exitCode}`;
+    }
+    if (trapKind === 'log_out') {
+      logs.push(String(arg1 ?? ''));
+      return '';
+    }
+    if (trapKind === 'log_err') {
+      stderrLines.push(String(arg1 ?? ''));
+      return '';
+    }
+    return '';
+  };
+  Object.setPrototypeOf(hostTrap, null);
+
+  const sandboxGlobal: Record<string, unknown> = Object.assign(
+    Object.create(null) as Record<string, unknown>,
     {
-      get(_target, prop) {
-        if (typeof prop === 'symbol' || prop === 'toJSON' || prop === 'valueOf') {
-          return undefined;
-        }
-        envReadAttempts += 1;
-        recordEvent(
-          'env',
-          `Blocked read of process.env.${String(prop)} (zero-secret sandbox)`,
-          true
-        );
-        return undefined;
-      },
-      ownKeys() {
-        envReadAttempts += 1;
-        recordEvent(
-          'env',
-          'Blocked enumeration of process.env keys (zero-secret sandbox)',
-          true
-        );
-        return [];
-      },
+      RAW_CSV: String(csvInput),
+      csvText: String(csvInput),
+      inputCsv: String(csvInput),
+      __hostTrap: hostTrap,
     }
   );
 
-  const trappedFetch = (url: unknown): never => {
-    outboundAttempts += 1;
-    const targetUrl = String(url ?? 'unknown-url');
-    recordEvent(
-      'network',
-      `Blocked outbound fetch to ${targetUrl} (--network=none)`,
-      true
-    );
-    throw new Error(
-      `SANDBOX_NETWORK_BLOCKED: Outbound network access to ${targetUrl} is disabled (--network=none)`
-    );
+  const wrappedScript = `
+(function() {
+  const trap = globalThis.__hostTrap;
+  delete globalThis.__hostTrap;
+
+  const envProxy = new Proxy(Object.create(null), {
+    get(_target, prop) {
+      if (typeof prop === 'symbol') return undefined;
+      trap('env_get', String(prop));
+      return undefined;
+    },
+    ownKeys() {
+      trap('env_keys');
+      return [];
+    },
+  });
+
+  const trappedFetch = function fetch(url) {
+    const errMsg = trap('net_fetch', String(url ?? 'unknown-url'));
+    throw new Error(errMsg);
   };
 
   const trappedHttpModule = {
-    request: (url: unknown): never => {
-      outboundAttempts += 1;
-      const targetUrl =
-        typeof url === 'string' ? url : JSON.stringify(url ?? 'http-endpoint');
-      recordEvent(
-        'network',
-        `Blocked outbound HTTP request to ${targetUrl} (--network=none)`,
-        true
-      );
-      throw new Error(
-        'SANDBOX_NETWORK_BLOCKED: Outbound HTTP request is disabled (--network=none)'
-      );
+    request: function request(url) {
+      const target = typeof url === 'string' ? url : JSON.stringify(url ?? 'http-endpoint');
+      throw new Error(trap('net_http_req', target));
     },
-    get: (url: unknown): never => {
-      outboundAttempts += 1;
-      const targetUrl =
-        typeof url === 'string' ? url : JSON.stringify(url ?? 'http-endpoint');
-      recordEvent(
-        'network',
-        `Blocked outbound HTTP GET to ${targetUrl} (--network=none)`,
-        true
-      );
-      throw new Error(
-        'SANDBOX_NETWORK_BLOCKED: Outbound HTTP GET is disabled (--network=none)'
-      );
+    get: function get(url) {
+      const target = typeof url === 'string' ? url : JSON.stringify(url ?? 'http-endpoint');
+      throw new Error(trap('net_http_get', target));
     },
   };
 
-  const handleFsWrite = (targetPath: unknown, content: unknown): void => {
-    if (isSafeWorkPath(targetPath)) {
-      inMemoryWorkFs.set(String(targetPath), String(content ?? ''));
-      return;
+  const handleFsWrite = function(targetPath, content) {
+    const res = trap('fs_write', String(targetPath ?? ''), String(content ?? ''));
+    if (res !== 'OK') {
+      throw new Error(res);
     }
-    fsWriteAttempts += 1;
-    const pathLabel = String(targetPath ?? 'unknown-path');
-    recordEvent(
-      'filesystem',
-      `Blocked filesystem write outside /work: ${pathLabel} (--read-only)`,
-      true
-    );
-    throw new Error(
-      `SANDBOX_FS_READONLY: Cannot write to ${pathLabel} on read-only root filesystem`
-    );
   };
 
   const trappedFsModule = {
-    writeFileSync: (targetPath: unknown, content: unknown): void => {
+    writeFileSync: function writeFileSync(targetPath, content) {
       handleFsWrite(targetPath, content);
     },
-    appendFileSync: (targetPath: unknown, content: unknown): void => {
+    appendFileSync: function appendFileSync(targetPath, content) {
       handleFsWrite(targetPath, content);
     },
-    writeFile: (
-      targetPath: unknown,
-      content: unknown,
-      cb?: (err: Error | null) => void
-    ): void => {
+    writeFile: function writeFile(targetPath, content, cb) {
       try {
         handleFsWrite(targetPath, content);
-        if (typeof cb === 'function') {
-          cb(null);
-        }
-      } catch (err: unknown) {
-        if (typeof cb === 'function' && err instanceof Error) {
-          cb(err);
-        } else {
-          throw err;
-        }
+        if (typeof cb === 'function') cb(null);
+      } catch (err) {
+        if (typeof cb === 'function') cb(err);
+        else throw err;
       }
     },
-    readFileSync: (targetPath: unknown): string => {
-      const p = String(targetPath ?? '');
-      if (p === '/work/input.csv' || p === 'input.csv') {
-        return csvInput;
-      }
-      if (inMemoryWorkFs.has(p)) {
-        return inMemoryWorkFs.get(p) ?? '';
-      }
-      throw new Error(`SANDBOX_FS_READ_BLOCKED: Cannot read ${p}`);
+    readFileSync: function readFileSync(targetPath) {
+      const res = trap('fs_read', String(targetPath ?? ''));
+      if (res.startsWith('DATA:')) return res.slice(5);
+      throw new Error(res.slice(4));
     },
   };
 
-  const trappedRequire = (modName: unknown): unknown => {
+  const trappedRequire = function require(modName) {
     const clean = String(modName ?? '').replace(/^node:/, '');
-    if (clean === 'http' || clean === 'https') {
-      return trappedHttpModule;
-    }
-    if (clean === 'fs' || clean === 'fs/promises') {
-      return trappedFsModule;
-    }
-    if (clean === 'child_process' || clean === 'net' || clean === 'tls') {
-      outboundAttempts += 1;
-      recordEvent(
-        'network',
-        `Blocked restricted module require('${clean}') in sandbox`,
-        true
-      );
-      throw new Error(
-        `SANDBOX_MODULE_BLOCKED: Module '${clean}' is forbidden in sandbox`
-      );
-    }
-    throw new Error(
-      `SANDBOX_MODULE_BLOCKED: External module '${String(modName)}' is unavailable`
-    );
+    if (clean === 'http' || clean === 'https') return trappedHttpModule;
+    if (clean === 'fs' || clean === 'fs/promises') return trappedFsModule;
+    throw new Error(trap('mod_block', clean));
   };
 
-  const sandboxGlobal: Record<string, unknown> = {
-    RAW_CSV: csvInput,
-    csvText: csvInput,
-    inputCsv: csvInput,
-    module: { exports: {} },
-    exports: {},
-    fetch: trappedFetch,
-    http: trappedHttpModule,
-    https: trappedHttpModule,
-    fs: trappedFsModule,
-    require: trappedRequire,
-    process: {
-      env: envProxy,
-      cwd: () => '/work',
-      exit: (code = 1) => {
-        exitCode = typeof code === 'number' ? code : 1;
-        throw new Error(`SANDBOX_PROCESS_EXIT:${exitCode}`);
-      },
-    },
-    console: {
-      log: (...args: unknown[]) => {
-        logs.push(args.map((a) => String(a)).join(' '));
-      },
-      warn: (...args: unknown[]) => {
-        logs.push(args.map((a) => String(a)).join(' '));
-      },
-      error: (...args: unknown[]) => {
-        stderrLines.push(args.map((a) => String(a)).join(' '));
-      },
+  globalThis.module = { exports: {} };
+  globalThis.exports = globalThis.module.exports;
+  globalThis.fetch = trappedFetch;
+  globalThis.http = trappedHttpModule;
+  globalThis.https = trappedHttpModule;
+  globalThis.fs = trappedFsModule;
+  globalThis.require = trappedRequire;
+  globalThis.process = {
+    env: envProxy,
+    cwd: function cwd() { return '/work'; },
+    exit: function exit(code = 1) {
+      throw new Error(trap('proc_exit', Number(code)));
     },
   };
+  globalThis.console = {
+    log: function log(...args) { trap('log_out', args.map((a) => String(a)).join(' ')); },
+    warn: function warn(...args) { trap('log_out', args.map((a) => String(a)).join(' ')); },
+    error: function error(...args) { trap('log_err', args.map((a) => String(a)).join(' ')); },
+  };
+  const module = globalThis.module;
+  const exports = globalThis.exports;
+  const fetch = globalThis.fetch;
+  const http = globalThis.http;
+  const https = globalThis.https;
+  const fs = globalThis.fs;
+  const require = globalThis.require;
+  const process = globalThis.process;
+  const console = globalThis.console;
 
-  const wrappedScript = `
-(function() {
   ${scriptSource}
   if (typeof transformCsv === 'function') {
     return transformCsv(RAW_CSV);
@@ -490,6 +512,7 @@ export async function runSandboxWithShadowProbe(
   );
 
   let shadowOutput: ScriptOutput = { series: [] };
+  let mergedReceipt: SandboxReceipt = primaryRun.receipt;
   if (!primaryRun.receipt.timedOut && !primaryRun.receipt.memoryCapped) {
     const shadowRun = await executeIsolatedVmRun(
       scriptSource,
@@ -497,16 +520,64 @@ export async function runSandboxWithShadowProbe(
       timeoutMs
     );
     shadowOutput = shadowRun.output;
+    if (
+      shadowRun.receipt.events.length > 0 ||
+      shadowRun.receipt.timedOut ||
+      shadowRun.receipt.memoryCapped ||
+      shadowRun.receipt.exitCode !== 0
+    ) {
+      mergedReceipt = {
+        ...primaryRun.receipt,
+        outboundBytes:
+          primaryRun.receipt.outboundBytes + shadowRun.receipt.outboundBytes,
+        outboundAttempts: Math.max(
+          primaryRun.receipt.outboundAttempts,
+          shadowRun.receipt.outboundAttempts
+        ),
+        hostSecretExposed:
+          primaryRun.receipt.hostSecretExposed ||
+          shadowRun.receipt.hostSecretExposed,
+        envReadAttempts: Math.max(
+          primaryRun.receipt.envReadAttempts,
+          shadowRun.receipt.envReadAttempts
+        ),
+        hostDiskDeltaBytes:
+          primaryRun.receipt.hostDiskDeltaBytes +
+          shadowRun.receipt.hostDiskDeltaBytes,
+        fsWriteAttempts: Math.max(
+          primaryRun.receipt.fsWriteAttempts,
+          shadowRun.receipt.fsWriteAttempts
+        ),
+        exitCode:
+          primaryRun.receipt.exitCode !== 0
+            ? primaryRun.receipt.exitCode
+            : shadowRun.receipt.exitCode,
+        timedOut: primaryRun.receipt.timedOut || shadowRun.receipt.timedOut,
+        memoryCapped:
+          primaryRun.receipt.memoryCapped || shadowRun.receipt.memoryCapped,
+        containerDestroyed:
+          primaryRun.receipt.containerDestroyed &&
+          shadowRun.receipt.containerDestroyed,
+        events:
+          primaryRun.receipt.events.length > 0
+            ? primaryRun.receipt.events
+            : shadowRun.receipt.events,
+        stderr:
+          primaryRun.receipt.stderr.length > 0
+            ? primaryRun.receipt.stderr
+            : shadowRun.receipt.stderr,
+      };
+    }
   }
 
   const ok =
-    primaryRun.receipt.exitCode === 0 &&
-    !primaryRun.receipt.timedOut &&
-    !primaryRun.receipt.memoryCapped;
+    mergedReceipt.exitCode === 0 &&
+    !mergedReceipt.timedOut &&
+    !mergedReceipt.memoryCapped;
 
   const errorMsg =
-    primaryRun.receipt.stderr.length > 0
-      ? primaryRun.receipt.stderr
+    mergedReceipt.stderr.length > 0
+      ? mergedReceipt.stderr
       : 'Sandbox script failed';
 
   return {
@@ -516,7 +587,7 @@ export async function runSandboxWithShadowProbe(
     shadowSeries: shadowOutput.series,
     scriptOutput: primaryRun.output,
     shadowOutput,
-    sandboxReceipt: primaryRun.receipt,
+    sandboxReceipt: mergedReceipt,
     shadowCsvText,
   };
 }
