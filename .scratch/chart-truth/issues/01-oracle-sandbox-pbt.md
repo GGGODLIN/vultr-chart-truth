@@ -35,6 +35,8 @@
 - **Closeout Review Findings & Fixes**:
   - `Acceptance-miss —When a script attempts outbound fetch/http, reads process.env.VULTR_API_KEY... → executeIsolatedVmRun exposed host-realm function constructors (fetch.constructor("return globalThis")()) inside node:vm` (Finding 1, HIGH): Fixed in `lib/sandbox.ts` by constructing all sandbox globals inside the VM realm over a single null-prototype primitive-returning `hostTrap` and verified by regression test in `tests/oracle-sandbox.test.ts`.
   - `Failure-miss: F5 — runSandboxWithShadowProbe discarded shadowRun.receipt → containment events triggered only on the k=3 shadow run were omitted from sandboxReceipt` (Finding 2, LOW): Fixed in `lib/sandbox.ts` by merging `shadowRun.receipt` into `mergedReceipt` and verified in `tests/oracle-sandbox.test.ts`.
+- **Architecture Visual Candidate Gate (`/implement` Step 3.8)**: `waived` by top-level human decision (`user verbatim = "1b, 2b, 3a"`, `reason = user selected b (這次不用)`, `feature_base_sha = 1cd11375176cf8754a37849397d948fda53abcd3`, `head_sha = d3b430a327e41f4ef85a3e87d12c8b16c1079bff`).
+
 
 
 
