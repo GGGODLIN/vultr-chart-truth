@@ -4,7 +4,7 @@
 
 **Blocked by:** `01 — Independent Accounting Oracle, Shadow-CSV Probe, Hardened Sandbox Runner & Conditional PBT Suite`
 
-**Status:** `ready-for-agent`
+**Status:** `completed`
 
 **Needs:** None — a worker can check every item unaided
 
@@ -18,8 +18,16 @@
 
 **Regression scope:** Preserve all Ticket 01 conditional PBT invariants (`P1_NO_HARDCODED_MOCK`, `P2_SUBTOTAL_AND_CURRENCY_CONSERVATION`, `P3_BLAST_RADIUS_ZERO`) and `evaluateChartTruthOracle` behavior while adding the 5-stage Vultr Serverless Inference + self-healing pipeline.
 
-- [ ] `POST /api/chart-truth/run` executes the 5 stages (`safetyPreScan`, `codeGen`, `sandboxRun`, `oracleAndClefAudit`, `selfHeal`) and returns both `initialRun` (with caught oracle violations / containment events) and `repairedRun` (passing `P1 && P2 && P3` in a fresh container) for all 3 adversarial presets — Source: Story 5
-- [ ] `clef` decision integration returns calibrated probabilities (`pDataFaithful`, `pLayoutLegible`, `pContainmentIntact`) in `0..1`, and when `VULTR_API_KEY` is unset, times out, or returns 5xx/429, the pipeline falls back cleanly to deterministic local evaluation without leaking any key or stack trace — Source: Story 6 — Failure: F4
-- [ ] When `glm-5.3-flash` wraps generated code in markdown fences (`` ```javascript ... ``` ``) or prose, the extractor strips fences cleanly before sandbox execution — Source: Story 1 — Failure: F3
-- [ ] Prompt-injection scanning (`nemotron-3.5-content-safety` + local heuristic scanner) inspects column headers, leaf cells, and summary/comment rows alike so an injection placed in a header or trailing memo column cannot bypass detection — Source: Story 4 — Failure: F5
-- [ ] Requests with empty `csvText`, missing `prompt`, or `csvText` larger than `2 MB` return HTTP `400` with a structured error message without spawning a sandbox container — Source: Story 7 — Failure: F6
+- [x] `POST /api/chart-truth/run` executes the 5 stages (`safetyPreScan`, `codeGen`, `sandboxRun`, `oracleAndClefAudit`, `selfHeal`) and returns both `initialRun` (with caught oracle violations / containment events) and `repairedRun` (passing `P1 && P2 && P3` in a fresh container) for all 3 adversarial presets — Source: Story 5
+- [x] `clef` decision integration returns calibrated probabilities (`pDataFaithful`, `pLayoutLegible`, `pContainmentIntact`) in `0..1`, and when `VULTR_API_KEY` is unset, times out, or returns 5xx/429, the pipeline falls back cleanly to deterministic local evaluation without leaking any key or stack trace — Source: Story 6 — Failure: F4
+- [x] When `glm-5.3-flash` wraps generated code in markdown fences (`` ```javascript ... ``` ``) or prose, the extractor strips fences cleanly before sandbox execution — Source: Story 1 — Failure: F3
+- [x] Prompt-injection scanning (`nemotron-3.5-content-safety` + local heuristic scanner) inspects column headers, leaf cells, and summary/comment rows alike so an injection placed in a header or trailing memo column cannot bypass detection — Source: Story 4 — Failure: F5
+- [x] Requests with empty `csvText`, missing `prompt`, or `csvText` larger than `2 MB` return HTTP `400` with a structured error message without spawning a sandbox container — Source: Story 7 — Failure: F6
+
+## Verification Log
+
+- **Ticket 02 TDD & YAGNI Verification**:
+  - RED baseline observed before implementation: `tests 5 | pass 0 | fail 5` in `tests/pipeline-api.test.ts`.
+  - Applied all 9 `[ticket-yagni]` `demote` trims (`FILE:lib/index.ts`, single-repair `runChartTruthPipeline`, `InjectionRule`, `SafetyScanLocation`/`SafetyScanFinding`/`SafetyScanVerdict`, `PipelineStageStatus`, `VultrInferenceOptions`, `ChartTruthRunResponse`).
+  - GREEN verification after trim (`dispatch_base_sha = 80c69fe38932fec9c94b6e64c095d1e123d43bc8`): `npm test` passed `17/17` tests (`12` Ticket 01 tests + `5` Ticket 02 acceptance tests); `npm run typecheck` exited `0`.
+

@@ -111,3 +111,86 @@ export interface AdversarialPreset {
   repairedScript: string;
   description: string;
 }
+
+export type SafetyScanLocation = 'header' | 'leaf' | 'summary';
+
+export interface SafetyScanFinding {
+  location: SafetyScanLocation;
+  pattern: string;
+}
+
+export interface SafetyScanVerdict {
+  safe: boolean;
+  modelUsed: string;
+  mode: 'vultr' | 'fallback';
+  findings: SafetyScanFinding[];
+}
+
+export interface ClefDecisionCard {
+  model: string;
+  usedFallback: boolean;
+  pDataFaithful: number;
+  pLayoutLegible: number;
+  pContainmentIntact: number;
+  overallDecision: 'verified' | 'rejected_lie' | 'contained_exploit';
+  rationale: string;
+}
+
+export type PipelineStageId =
+  | 'safetyPreScan'
+  | 'codeGen'
+  | 'sandboxRun'
+  | 'oracleAndClefAudit'
+  | 'selfHeal';
+
+export interface PipelineStageStatus {
+  id: PipelineStageId;
+  status: 'completed' | 'triggered' | 'skipped';
+}
+
+export interface PipelineRunAttempt {
+  attemptNumber: 1 | 2;
+  scriptSource: string;
+  generationModel: string;
+  usedFallbackGenerator: boolean;
+  sandboxResult: SandboxShadowResult;
+  oracleVerdict: OracleVerdict;
+  clefDecision: ClefDecisionCard;
+}
+
+export type PipelineErrorCode =
+  | CsvValidationErrorCode
+  | 'MISSING_PROMPT'
+  | 'INVALID_JSON';
+
+export interface PipelineError {
+  code: PipelineErrorCode;
+  message: string;
+}
+
+export interface VultrInferenceOptions {
+  apiKey?: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}
+
+export interface ChartTruthRunRequest extends VultrInferenceOptions {
+  csvText: string;
+  prompt: string;
+  scenarioId?: AdversarialPresetId | string;
+  unitCurrency?: string;
+}
+
+export interface ChartTruthRunResponse {
+  ok: boolean;
+  status: 200 | 400;
+  error?: PipelineError;
+  scenarioId?: string;
+  safetyScan: SafetyScanVerdict;
+  stages: PipelineStageStatus[];
+  initialRun: PipelineRunAttempt | null;
+  repairedRun: PipelineRunAttempt | null;
+  selfHealTriggered: boolean;
+  containersDestroyed: number;
+}
+
