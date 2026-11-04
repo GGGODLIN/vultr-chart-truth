@@ -11,6 +11,18 @@ When an analyst drops an untrusted CSV into an AI coding assistant to generate a
 
 ---
 
+## Visual Walkthrough & Containment Moment
+
+![ChartTruth 6-Frame Contact Sheet](/docs/media/stills.png)
+
+- **[Demo Video (`chart-truth-demo.mp4`)](/docs/media/chart-truth-demo.mp4)**
+- **[1. Deceptive Bar Hook (`$840,000` vs `$420,000`)](/docs/media/01-deceptive-bar-hook.png)**
+- **[2. Blast Radius = 0 Containment Moment (`0 Outbound Bytes` · `0 Secrets Exposed` · `0 B Host Disk Δ`)](/docs/media/02-blast-radius-zero-containment.png)**
+- **[3. Shadow-CSV (`k = 3`) Probe & `2x` Total Slice](/docs/media/03-shadow-csv-probe-and-slice.png)**
+- **[4. Side-by-Side Before (Intercepted) vs. After (Container #2 Self-Healed Studio)](/docs/media/04-before-after-self-healed-studio.png)**
+
+---
+
 ## Architecture: Control Plane vs. Ephemeral Zero-Secret Sandbox
 
 ChartTruth enforces a strict **Two-Layer Architecture**:
