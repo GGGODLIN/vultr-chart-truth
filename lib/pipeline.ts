@@ -403,69 +403,58 @@ function findMatchingPreset(
   return undefined;
 }
 
+export function buildPipelineErrorResponse(
+  code: ChartTruthRunResponse['error'] extends { code: infer C } | undefined
+    ? C
+    : never,
+  message: string,
+  scenarioId?: string
+): ChartTruthRunResponse {
+  return {
+    ok: false,
+    status: 400,
+    error: { code, message },
+    scenarioId,
+    safetyScan: {
+      safe: true,
+      modelUsed: 'nemotron-3.5-content-safety',
+      mode: 'fallback',
+      findings: [],
+    },
+    stages: [],
+    initialRun: null,
+    repairedRun: null,
+    selfHealTriggered: false,
+    containersDestroyed: 0,
+  };
+}
+
 export async function runChartTruthPipeline(
   req: ChartTruthRunRequest
 ): Promise<ChartTruthRunResponse> {
-  const emptySafetyScan: SafetyScanVerdict = {
-    safe: true,
-    modelUsed: 'nemotron-3.5-content-safety',
-    mode: 'fallback',
-    findings: [],
-  };
-
   const csvValidationError = validateCsvInput(req.csvText);
   if (csvValidationError !== null) {
-    return {
-      ok: false,
-      status: 400,
-      error: {
-        code: csvValidationError.code,
-        message: csvValidationError.message,
-      },
-      scenarioId: req.scenarioId,
-      safetyScan: emptySafetyScan,
-      stages: [],
-      initialRun: null,
-      repairedRun: null,
-      selfHealTriggered: false,
-      containersDestroyed: 0,
-    };
+    return buildPipelineErrorResponse(
+      csvValidationError.code,
+      csvValidationError.message,
+      req.scenarioId
+    );
   }
 
   if (typeof req.prompt !== 'string' || req.prompt.trim().length === 0) {
-    return {
-      ok: false,
-      status: 400,
-      error: {
-        code: 'MISSING_PROMPT',
-        message: 'Prompt is required and must be a non-empty string.',
-      },
-      scenarioId: req.scenarioId,
-      safetyScan: emptySafetyScan,
-      stages: [],
-      initialRun: null,
-      repairedRun: null,
-      selfHealTriggered: false,
-      containersDestroyed: 0,
-    };
+    return buildPipelineErrorResponse(
+      'MISSING_PROMPT',
+      'Prompt is required and must be a non-empty string.',
+      req.scenarioId
+    );
   }
 
   if (Buffer.byteLength(req.prompt, 'utf8') > 16384) {
-    return {
-      ok: false,
-      status: 400,
-      error: {
-        code: 'PAYLOAD_TOO_LARGE',
-        message: 'Prompt exceeds maximum allowed size of 16 KB.',
-      },
-      scenarioId: req.scenarioId,
-      safetyScan: emptySafetyScan,
-      stages: [],
-      initialRun: null,
-      repairedRun: null,
-      selfHealTriggered: false,
-      containersDestroyed: 0,
-    };
+    return buildPipelineErrorResponse(
+      'PAYLOAD_TOO_LARGE',
+      'Prompt exceeds maximum allowed size of 16 KB.',
+      req.scenarioId
+    );
   }
 
   const inferenceOptions: VultrInferenceOptions = {

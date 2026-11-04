@@ -1,5 +1,7 @@
-import { runChartTruthPipeline } from '../../../../lib/pipeline.ts';
-import type { ChartTruthRunResponse } from '../../../../lib/types.ts';
+import {
+  buildPipelineErrorResponse,
+  runChartTruthPipeline,
+} from '../../../../lib/pipeline.ts';
 
 const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024 + 65536;
 
@@ -9,52 +11,26 @@ export async function POST(request: Request): Promise<Response> {
     contentLengthHeader !== null &&
     Number(contentLengthHeader) > MAX_REQUEST_BODY_BYTES
   ) {
-    const oversizedResponse: ChartTruthRunResponse = {
-      ok: false,
-      status: 400,
-      error: {
-        code: 'PAYLOAD_TOO_LARGE',
-        message: 'Request payload exceeds maximum allowed size.',
-      },
-      safetyScan: {
-        safe: true,
-        modelUsed: 'nemotron-3.5-content-safety',
-        mode: 'fallback',
-        findings: [],
-      },
-      stages: [],
-      initialRun: null,
-      repairedRun: null,
-      selfHealTriggered: false,
-      containersDestroyed: 0,
-    };
-    return Response.json(oversizedResponse, { status: 400 });
+    return Response.json(
+      buildPipelineErrorResponse(
+        'PAYLOAD_TOO_LARGE',
+        'Request payload exceeds maximum allowed size.'
+      ),
+      { status: 400 }
+    );
   }
 
   let body: Record<string, unknown>;
   try {
     const rawText = await request.text();
     if (Buffer.byteLength(rawText, 'utf8') > MAX_REQUEST_BODY_BYTES) {
-      const oversizedResponse: ChartTruthRunResponse = {
-        ok: false,
-        status: 400,
-        error: {
-          code: 'PAYLOAD_TOO_LARGE',
-          message: 'Request payload exceeds maximum allowed size.',
-        },
-        safetyScan: {
-          safe: true,
-          modelUsed: 'nemotron-3.5-content-safety',
-          mode: 'fallback',
-          findings: [],
-        },
-        stages: [],
-        initialRun: null,
-        repairedRun: null,
-        selfHealTriggered: false,
-        containersDestroyed: 0,
-      };
-      return Response.json(oversizedResponse, { status: 400 });
+      return Response.json(
+        buildPipelineErrorResponse(
+          'PAYLOAD_TOO_LARGE',
+          'Request payload exceeds maximum allowed size.'
+        ),
+        { status: 400 }
+      );
     }
     const parsed = JSON.parse(rawText) as unknown;
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -62,26 +38,13 @@ export async function POST(request: Request): Promise<Response> {
     }
     body = parsed as Record<string, unknown>;
   } catch {
-    const errorResponse: ChartTruthRunResponse = {
-      ok: false,
-      status: 400,
-      error: {
-        code: 'INVALID_JSON',
-        message: 'Request body must be valid JSON object with csvText and prompt.',
-      },
-      safetyScan: {
-        safe: true,
-        modelUsed: 'nemotron-3.5-content-safety',
-        mode: 'fallback',
-        findings: [],
-      },
-      stages: [],
-      initialRun: null,
-      repairedRun: null,
-      selfHealTriggered: false,
-      containersDestroyed: 0,
-    };
-    return Response.json(errorResponse, { status: 400 });
+    return Response.json(
+      buildPipelineErrorResponse(
+        'INVALID_JSON',
+        'Request body must be valid JSON object with csvText and prompt.'
+      ),
+      { status: 400 }
+    );
   }
 
   const csvText = typeof body.csvText === 'string' ? body.csvText : '';

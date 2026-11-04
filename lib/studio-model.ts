@@ -58,7 +58,6 @@ interface StudioBlastRadiusCard {
   hostSecretExposed: boolean;
   hostDiskDeltaBytes: number;
   containersDestroyed: number;
-  interceptedAttemptsCount: number;
   events: ContainmentEvent[];
 }
 
@@ -72,7 +71,6 @@ export interface StudioViewModel {
   reconciliationRows: StudioReconciliationRow[];
   clefMeters: StudioClefMeter[];
   clefDecision: ClefDecisionCard | null;
-  initialClefDecision: ClefDecisionCard | null;
   blastRadiusCard: StudioBlastRadiusCard;
 }
 
@@ -271,11 +269,6 @@ function buildBlastRadiusCard(
   const initReceipt = response.initialRun?.sandboxResult.sandboxReceipt;
   const finalRun = response.repairedRun ?? response.initialRun;
   const finalReceipt = finalRun?.sandboxResult.sandboxReceipt;
-  const interceptedAttemptsCount =
-    (initReceipt?.outboundAttempts ?? 0) +
-    (initReceipt?.envReadAttempts ?? 0) +
-    (initReceipt?.fsWriteAttempts ?? 0) +
-    (initReceipt?.timedOut ? 1 : 0);
 
   return {
     blastRadiusZero: finalRun?.oracleVerdict.p3BlastRadiusZero ?? true,
@@ -286,7 +279,6 @@ function buildBlastRadiusCard(
     hostSecretExposed: finalReceipt?.hostSecretExposed ?? false,
     hostDiskDeltaBytes: finalReceipt?.hostDiskDeltaBytes ?? 0,
     containersDestroyed: response.containersDestroyed,
-    interceptedAttemptsCount,
     events: initReceipt?.events ?? [],
   };
 }
@@ -318,7 +310,6 @@ export function buildStudioViewModel(
     reconciliationRows: buildReconciliationRows(response),
     clefMeters: buildClefMeters(response),
     clefDecision: finalRun?.clefDecision ?? null,
-    initialClefDecision: response.initialRun?.clefDecision ?? null,
     blastRadiusCard: buildBlastRadiusCard(response),
   };
 }
