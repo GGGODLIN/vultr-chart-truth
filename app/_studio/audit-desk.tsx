@@ -17,7 +17,8 @@ async function executeAuditFetch(
   payload: { scenarioId?: string; csvText: string; prompt: string },
   requestId: number,
   signal: AbortSignal,
-  dispatch: (action: StudioAction) => void
+  dispatch: (action: StudioAction) => void,
+  presetSnapshots?: Record<string, ChartTruthRunResponse>
 ): Promise<void> {
   try {
     const res = await fetch('/api/chart-truth/run', {
@@ -27,6 +28,14 @@ async function executeAuditFetch(
       signal,
     });
     if (!res.ok) {
+      if (payload.scenarioId && presetSnapshots?.[payload.scenarioId]) {
+        dispatch({
+          type: 'RESOLVE_AUDIT',
+          requestId,
+          response: presetSnapshots[payload.scenarioId],
+        });
+        return;
+      }
       const errBody = (await res.json().catch(() => null)) as ChartTruthRunResponse | null;
       dispatch({
         type: 'FAIL_AUDIT',
@@ -39,6 +48,14 @@ async function executeAuditFetch(
     dispatch({ type: 'RESOLVE_AUDIT', requestId, response: data });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
+      return;
+    }
+    if (payload.scenarioId && presetSnapshots?.[payload.scenarioId]) {
+      dispatch({
+        type: 'RESOLVE_AUDIT',
+        requestId,
+        response: presetSnapshots[payload.scenarioId],
+      });
       return;
     }
     dispatch({
@@ -76,13 +93,14 @@ function seedState(initialResponse: ChartTruthRunResponse | null): StudioState {
 
 export interface AuditDeskProps {
   initialResponse: ChartTruthRunResponse | null;
+  presetSnapshots?: Record<string, ChartTruthRunResponse>;
 }
 
-export function AuditDesk({ initialResponse }: AuditDeskProps): ReactNode {
+export function AuditDesk({ initialResponse, presetSnapshots }: AuditDeskProps): ReactNode {
   const [state, dispatch] = useReducer(reduceStudioState, initialResponse, seedState);
   const [sourceOpen, setSourceOpen] = useState(false);
   const requestSeqRef = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
+  const abortRef = useRef(null as AbortController | null);
 
   const handleRunAudit = () => {
     const { requestId, signal } = nextAbortableRequest(abortRef, requestSeqRef);
@@ -92,7 +110,8 @@ export function AuditDesk({ initialResponse }: AuditDeskProps): ReactNode {
       { scenarioId, csvText: state.csvText, prompt: state.prompt },
       requestId,
       signal,
-      dispatch
+      dispatch,
+      presetSnapshots
     );
   };
 
@@ -104,7 +123,8 @@ export function AuditDesk({ initialResponse }: AuditDeskProps): ReactNode {
       { scenarioId: preset.id, csvText: preset.csvText, prompt: preset.prompt },
       requestId,
       signal,
-      dispatch
+      dispatch,
+      presetSnapshots
     );
   };
 
