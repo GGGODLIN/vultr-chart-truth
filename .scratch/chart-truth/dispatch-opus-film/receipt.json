@@ -1,0 +1,20 @@
+{
+  "backend": "herdr-core",
+  "parent_backend": "herdr-core",
+  "worker_backend": "herdr-core",
+  "name": "opus-chart-truth-film",
+  "worker_id": "t5c",
+  "parent_id": "t1x",
+  "parent_session_id": "d3e41a3e-d10a-4193-a28b-0ca37ca8a618",
+  "pane_id": "t5c",
+  "tab_id": "tbe27f7b7af237bd360bdef4e989041d4a",
+  "session_id": "cd8e78d5-120a-4e24-8792-551ef2f1e800",
+  "log": "/Users/linhancheng/Desktop/projects/vultr-chart-truth/.scratch/chart-truth/dispatch-opus-film/receipts/opus-chart-truth-film.log",
+  "cwd": "/Users/linhancheng/Desktop/projects/vultr-chart-truth",
+  "harness": "claude",
+  "config_dir": "/Users/linhancheng/.claude-team-p",
+  "recipe": {
+    "model": "opus[1m]",
+    "effort": "max"
+  }
+}

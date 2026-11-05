@@ -3,6 +3,8 @@ node_modules/
 out/
 dist/
 .worktrees/
+.claude/worktrees/
+.scratch/chart-truth/dispatch-opus-*/receipts/
 .env
 .env.*
 !.env.example
