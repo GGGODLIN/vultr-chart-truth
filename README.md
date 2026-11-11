@@ -39,12 +39,12 @@ ChartTruth enforces a strict **Two-Layer Architecture**:
      - **`glm-5.3-flash`**: Stage 2 candidate transformation script synthesis and Stage 5 bounded 1-pass self-healing repair using the Oracle's minimal counterexample.
      - **`clef`** (`in=['text', 'image'] -> out=['decisions']`): Stage 4 calibrated decision probabilities (`P(Data_Faithful)`, `P(Layout_Legible)`, `P(Containment_Intact)`).
 2. **Ephemeral Zero-Secret Execution Sandbox**:
-   - Receives **zero environment secrets** and executes every candidate script under strict resource and network isolation:
+   - Receives **zero environment secrets** and executes every candidate script under resource and network isolation. Target container-isolation profile (architectural illustration — not yet wired in code):
      ```bash
      docker run --rm --network=none --memory=256m --cpus=0.5 --read-only --pids-limit=64 --cap-drop=ALL --security-opt=no-new-privileges --tmpfs /work:rw,size=32m
      ```
+   - **Current implementation (`lib/sandbox.ts`)**: Executes candidate scripts in-process via Node.js `node:vm` (`vm.runInContext`, reporting `engine: "vm-isolated"`) with proxy-trapped `process.env`, `fetch`/`http`, in-memory `/work` filesystem, and CPU timeout enforcement; `docker run --rm --network=none` container spawning is not yet wired up.
    - Any attempted outbound connection, environment secret read, filesystem write outside `/work`, or infinite loop is intercepted and logged as a structured `ContainmentEvent` while maintaining **Blast Radius = 0 (`0 Outbound Bytes`, `0 Secrets Exposed`, `0 B Host Disk Δ`)**.
-   - Includes a deterministic VM-isolated fallback runner for CI and unit/property test environments without a local Docker daemon.
 
 ---
 
